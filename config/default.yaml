@@ -1,0 +1,9 @@
+# 默认配置（非机密参数；密钥类配置请放入 .env，勿提交）
+
+app:
+  name: park_energy
+  version: 0.1.0
+
+# 示例：能耗数据接入参数
+data:
+  sample_dir: data/

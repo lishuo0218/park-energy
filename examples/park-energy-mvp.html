@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>园区异常定位诊断台 · MVP</title>
+<meta name="description" content="园区异常定位诊断台 MVP：倍率异常、账实差异、归属错分、基线偏离与疑似异常五类证据链演示，含候选根因与人工处置流程。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d3a5c'/%3E%3Ctext x='32' y='43' font-size='34' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EE%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#edf1f5;
+  --panel:#ffffff;
+  --ink:#0e2433;
+  --muted:#5c6b76;
+  --faint:#5b6c78;   /* 原 #8b9aa6 对比度 2.89:1，加深至 5.44:1 满足 WCAG AA */
+  --rule:#dde4ea;
+  --accent:#0d5ba4;
+  --amber:#94611a;   /* 原 #b7791f 对比度 3.64:1，加深至 5.27:1 */
+  --red:#c2410c;
+  --green:#0c7a5c;
+  --gray:#7b8a96;
+  --shadow:0 1px 2px rgba(8,32,50,.06),0 8px 24px -16px rgba(8,32,50,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+h1,h2,h3,h4{font-weight:800;letter-spacing:.01em}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:50;
+  background:linear-gradient(120deg,#082032 0%,#0d3a5c 62%,#11507e 100%);
+  color:#eaf2f8;padding:0;border-bottom:1px solid rgba(255,255,255,.08);
+}
+.topbar-in{max-width:1240px;margin:0 auto;padding:13px 26px;display:flex;align-items:center;gap:26px}
+.brand{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,#1a6fb5,#0a2c48);border:1px solid rgba(255,255,255,.18);display:grid;place-items:center;font-weight:800;color:#fff;font-size:15px;letter-spacing:.02em}
+.brand-t{font-size:15px;font-weight:800;letter-spacing:.02em;line-height:1.3}
+.brand-s{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#7fa8c8;margin-top:2px}
+.parkmeta{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#a9c6da;flex:1}
+.parkmeta b{color:#eaf2f8;font-weight:650}
+.topbar-act{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+.live{display:flex;align-items:center;gap:6px;font-size:12px;color:#a5c6dc}
+.live i{width:7px;height:7px;border-radius:50%;background:#4ec38f;box-shadow:0 0 0 3px rgba(78,195,143,.18);display:block}
+.live.busy i{background:#e0a44a;box-shadow:0 0 0 3px rgba(224,164,74,.18);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.35}}
+
+/* ---------- pipeline ---------- */
+.pipeline{background:var(--panel);border-bottom:1px solid var(--rule)}
+.pipeline-in{max-width:1240px;margin:0 auto;padding:15px 26px 17px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.pipeline-in::-webkit-scrollbar{display:none}
+.step{flex:1 0 152px;position:relative;padding-right:16px}
+.step:last-child{padding-right:0}
+.step-no{font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--faint);margin-bottom:5px}
+.step-t{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;background:#cfd8de;flex:0 0 auto;transition:.25s}
+.step.run .dot{background:var(--amber);box-shadow:0 0 0 4px rgba(183,121,31,.14);animation:blink .9s infinite}
+.step.done .dot{background:var(--green)}
+.step.wait .dot{background:var(--amber);box-shadow:0 0 0 4px rgba(148,97,26,.14)}
+.step.wait .step-t{color:var(--amber)}
+.step-d{font-size:11px;color:var(--faint);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step.run .step-t{color:var(--amber)}
+.step.done .step-t{color:var(--ink)}
+.step-line{position:absolute;right:2px;top:26px;width:12px;height:2px;background:var(--rule)}
+.step:last-child .step-line{display:none}
+
+/* ---------- kpi ---------- */
+.kpis{max-width:1240px;margin:0 auto;padding:18px 26px 0;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--rule);border-top:2px solid var(--accent);border-radius:9px;padding:13px 16px;box-shadow:var(--shadow)}
+.kpi:nth-child(2){border-top-color:var(--red)}
+.kpi:nth-child(3){border-top-color:var(--amber)}
+.kpi:nth-child(4){border-top-color:var(--gray)}
+.kpi:nth-child(5){border-top-color:var(--green)}
+.kpi .kl{font-size:11.5px;color:var(--muted);letter-spacing:.02em}
+.kpi .kv{font-size:22px;font-weight:800;margin-top:3px;letter-spacing:.01em}
+.kpi .kv small{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px}
+.kpi .ks{font-size:11px;color:var(--faint);margin-top:1px}
+
+/* ---------- workspace ---------- */
+.workspace{max-width:1240px;margin:18px auto 0;padding:0 26px;display:grid;grid-template-columns:348px minmax(0,1fr);gap:16px;align-items:start}
+.queue{background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;position:sticky;top:74px}
+.q-head{padding:15px 16px 12px;border-bottom:1px solid var(--rule)}
+.q-head-r{display:flex;align-items:baseline;justify-content:space-between}
+.q-head h2{font-size:15px}
+.q-head h2 span{font-size:12px;font-weight:600;color:var(--faint);margin-left:4px}
+.chips{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.chip{font-size:11.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--rule);color:var(--muted);background:#f7f9fb;transition:.15s}
+.chip:hover{border-color:#c3d2dd}
+.chip.on{background:rgba(13,91,164,.08);border-color:rgba(13,91,164,.35);color:var(--accent);font-weight:700}
+.q-list{padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 250px);overflow-y:auto}
+.qcard{text-align:left;width:100%;border:1px solid var(--rule);border-radius:9px;padding:11px 12px 10px;background:#fff;position:relative;transition:.15s;border-left:3px solid var(--rule)}
+.qcard:hover{border-color:#c4d3de;box-shadow:0 2px 10px -4px rgba(8,32,50,.22)}
+.qcard.sel{border-color:rgba(13,91,164,.5);border-left-color:var(--accent);background:#fafcff;box-shadow:0 2px 14px -6px rgba(13,91,164,.5)}
+.qcard[data-sev="high"]{border-left-color:#d97706}
+.qcard[data-sev="low"]{border-left-color:#94a3b8}
+.qc-top{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.03em;white-space:nowrap}
+.tag.high{background:#fdf1e7;color:#b45309}
+.tag.mid{background:#fbf4e3;color:#94611a}
+.tag.low{background:#eef2f6;color:#566270}
+.tag.type{background:#eef4fa;color:#2c5f8e;font-weight:600}
+.tag.st-pending{background:#fdf6e7;color:#8a5b0b;margin-left:auto}
+.tag.st-confirmed{background:#e9f5ef;color:var(--green);margin-left:auto}
+.tag.st-dispatched{background:#eef3fa;color:var(--accent);margin-left:auto}
+.tag.st-dismissed{background:#f1f4f7;color:#5b6c78;margin-left:auto}
+.qc-title{font-size:13px;font-weight:700;line-height:1.45;margin-bottom:2px}
+.qc-sub{font-size:11px;color:var(--faint)}
+.qc-conf{display:flex;align-items:center;gap:6px;margin-top:7px}
+.qc-bar{flex:1;height:3px;border-radius:2px;background:#e8eef3;overflow:hidden}
+.qc-bar i{display:block;height:100%;background:var(--accent)}
+.qc-conf span{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.q-empty{padding:26px 16px;text-align:center;color:var(--faint);font-size:12px}
+.q-tip{padding:10px 14px;font-size:11px;color:var(--faint);border-top:1px solid var(--rule);background:#fafcfd;line-height:1.55}
+
+/* ---------- detail ---------- */
+.detail{background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow);padding:24px 26px 22px;min-height:520px}
+.empty{display:grid;place-items:center;height:460px;text-align:center;color:var(--faint)}
+.empty .e-i{width:46px;height:46px;border-radius:12px;border:1px dashed #c9d5de;display:grid;place-items:center;margin:0 auto 12px;color:#b2c0cb;font-size:18px;font-weight:800}
+.empty .e-t{font-size:14px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.empty .e-s{font-size:12px;max-width:330px;line-height:1.6}
+.d-tags{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.d-title{font-size:19px;line-height:1.42;font-weight:800;margin-bottom:6px}
+.d-meta{font-size:12px;color:var(--muted)}
+.d-sum{font-size:13.5px;color:#33475b;background:#f8fafc;border:1px solid #e8eef3;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin:14px 0 16px}
+.chart-wrap{border:1px solid var(--rule);border-radius:9px;padding:12px 12px 8px;background:#fcfdfe;margin-bottom:18px}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 6px;flex-wrap:wrap}
+.chart-head .ct{font-size:12.5px;font-weight:700;color:#2b4257}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:1px}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto}
+.chart-note{font-size:11px;color:var(--faint);padding:2px 4px 4px;line-height:1.55}
+.tip{position:absolute;pointer-events:none;background:rgba(8,32,50,.94);color:#eaf2f8;border-radius:6px;padding:6px 9px;font-size:11px;line-height:1.55;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .12s;z-index:5;box-shadow:0 6px 18px -8px rgba(0,0,0,.6)}
+.tip.on{opacity:1}
+.d-cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:22px}
+h4.sec{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:800;margin-bottom:10px}
+.ev{list-style:none;display:flex;flex-direction:column;gap:9px}
+.ev li{display:flex;gap:10px;padding:9px 11px;background:#fafcfd;border:1px solid #e9eff4;border-radius:8px}
+.ev-n{font-size:11px;font-weight:800;color:var(--faint);padding-top:1px;min-width:16px}
+.ev-l{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+.ev-v{font-size:12.5px;font-weight:700;color:#1e3a4f;line-height:1.5}
+.ev-v .up{color:var(--red);font-weight:800}
+.ev-v .ok{color:var(--green);font-weight:800}
+.ev-d{font-size:11px;color:var(--faint);margin-top:2px;line-height:1.55}
+.ev-tbl{width:100%;border-collapse:collapse;margin-top:7px;font-size:11px;background:#fff;border:1px solid #e5ecf1;border-radius:6px;overflow:hidden}
+.ev-tbl th,.ev-tbl td{text-align:left;padding:4px 7px;border-bottom:1px solid #eef3f7}
+.ev-tbl th{color:var(--faint);font-weight:700;background:#f6f9fb}
+.ev-tbl td.bad{color:var(--red);font-weight:800}
+.causes{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
+.cause{padding:9px 11px;border:1px solid #e9eff4;border-radius:8px;background:#fafcfd}
+.cause:first-child{border-color:#f3d3c1;background:#fffaf7}
+.c-top{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:700}
+.c-top b{color:var(--accent);font-variant-numeric:tabular-nums}
+.cause:first-child .c-top b{color:var(--red)}
+.c-bar{height:4px;border-radius:2px;background:#e9eff4;margin:6px 0 4px;overflow:hidden}
+.c-bar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+.cause:first-child .c-bar i{background:var(--red)}
+.c-note{font-size:10.5px;color:var(--faint);line-height:1.5}
+.impacts{display:flex;flex-direction:column;border:1px solid #e9eff4;border-radius:8px;overflow:hidden}
+.imp{display:flex;justify-content:space-between;align-items:baseline;padding:8px 11px;border-bottom:1px solid #eef3f7;gap:8px}
+.imp:last-child{border-bottom:none}
+.imp .il{font-size:11.5px;color:var(--muted)}
+.imp .iv{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+
+.dispose{margin-top:20px;border-top:1px solid var(--rule);padding-top:15px}
+.disp-b{display:flex;gap:9px;flex-wrap:wrap}
+.btn{font-size:12.5px;font-weight:700;padding:9px 15px;border-radius:8px;border:1px solid transparent;transition:.15s;letter-spacing:.01em}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:0 2px 10px -5px rgba(13,91,164,.8)}
+.btn.primary:hover{background:#0a4c8a}
+.btn.ghost{background:#fff;border-color:#d3dee6;color:#33475b}
+.btn.ghost:hover{border-color:#b9cad7;background:#f8fbfd}
+.btn.small{padding:7px 12px;font-size:12px}
+.hint{font-size:11px;color:var(--faint);margin-top:10px;line-height:1.6}
+.done{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border-radius:8px;background:#f3f9f6;border:1px solid #cfe8dc;font-size:12px}
+.done.dispatched{background:#f2f7fc;border-color:#cfe0f0}
+.done.dismissed{background:#f5f7f9;border-color:#dfe6ec}
+.done .dt{font-weight:800;color:var(--green)}
+.done.dispatched .dt{color:var(--accent)}
+.done.dismissed .dt{color:#6b7c89}
+.done .dn{color:var(--muted);margin-top:1px;line-height:1.55}
+.link{font-size:11px;color:var(--accent);text-decoration:underline;margin-left:auto;white-space:nowrap}
+
+/* ---------- footer ---------- */
+.foot{max-width:1240px;margin:22px auto 46px;padding:0 26px;display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--faint);line-height:1.65}
+.foot b{color:var(--muted);font-weight:700}
+.nojs{max-width:1240px;margin:14px auto 0;padding:12px 16px;border:1px solid #e8c9a4;background:#fdf6e7;color:#6b4a12;border-radius:9px;font-size:13px;line-height:1.6}
+
+/* ---------- quotation ---------- */
+.btn.tbq{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.38);color:#eaf2f8}
+.btn.tbq:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.65)}
+body.q-lock{overflow:hidden}
+.flink{background:none;border:none;padding:0;font-family:inherit;font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer}
+.flink:hover{color:#0a4c8a}
+
+.q-overlay{position:fixed;inset:0;z-index:100;background:rgba(7,22,36,.58);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;padding:36px 18px 48px;animation:qfade .16s ease}
+.q-overlay[hidden]{display:none}
+@keyframes qfade{from{opacity:0}}
+.q-modal{width:100%;max-width:900px;background:#fff;border-radius:13px;box-shadow:0 34px 90px -34px rgba(8,32,50,.6);display:flex;flex-direction:column;max-height:calc(100vh - 82px);animation:qpop .18s ease}
+@keyframes qpop{from{opacity:0;transform:translateY(10px)}}
+
+.q-doc{overflow-y:auto;padding:32px 38px 26px;flex:1}
+.q-doc::-webkit-scrollbar{width:9px}
+.q-doc::-webkit-scrollbar-thumb{background:#cdd9e2;border-radius:5px;border:2px solid #fff}
+
+.q-doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.q-brand{display:flex;gap:14px;align-items:center}
+.q-logo{width:44px;height:44px;border-radius:11px;background:linear-gradient(145deg,#1a6fb5,#0a2c48);color:#fff;display:grid;place-items:center;font-weight:800;font-size:20px;flex:0 0 auto}
+.q-doc-head h2{font-size:24px;letter-spacing:.18em}
+.q-sub{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-top:3px}
+.q-no{text-align:right;font-size:12px;color:var(--muted);line-height:1.9;white-space:nowrap}
+.q-no b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+.q-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 16px;padding:15px 0 13px;border-bottom:1px solid var(--rule)}
+.qm b{display:block;font-size:10.5px;color:var(--faint);font-weight:800;letter-spacing:.08em;margin-bottom:3px}
+.qm span{font-size:12.5px;color:#1e3a4f;font-weight:650;line-height:1.5}
+
+.q-scope{margin-top:14px;font-size:12.5px;line-height:1.7;background:#f4f8fb;border:1px solid #dce8f1;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:9px 14px;color:#2c4a63}
+
+.q-sec{margin-top:24px}
+.q-sec h3{font-size:13.5px;font-weight:800;margin-bottom:10px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.q-sec h3 small{font-size:11px;color:var(--faint);font-weight:600}
+.q-tblwrap{border:1px solid #dbe5ec;border-radius:8px;overflow:hidden}
+.q-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.q-tbl th{background:#0d3a5c;color:#eaf2f8;text-align:left;padding:8px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.q-tbl th.r{text-align:right}
+.q-tbl td{padding:9px 12px;border-top:1px solid #ecf1f5;vertical-align:top;line-height:1.6}
+.q-tbl .no{color:var(--faint);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;width:34px}
+.q-tbl .item{font-weight:700;color:#1e3a4f;white-space:nowrap}
+.q-tbl .desc{color:#485f70;font-size:11.5px}
+.q-tbl .bill{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.q-tbl td.amt{text-align:right;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums;color:#1e3a4f}
+.q-tbl .amt small{display:block;font-size:10px;color:var(--faint);font-weight:600}
+.q-tbl tfoot td{padding:8px 12px;background:#f5f8fa;border-top:1px dashed #c7d5e0;font-weight:800;text-align:right;color:#1e3a4f;font-variant-numeric:tabular-nums}
+.q-tbl tfoot td:first-child{text-align:left;color:var(--muted);font-weight:700;font-size:11.5px}
+
+.q-total{margin-top:24px;border:2px solid var(--accent);border-radius:10px;overflow:hidden}
+.qt-rows{padding:4px 18px}
+.qt-r{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed #d8e2ea;font-size:12.5px}
+.qt-r:last-child{border-bottom:none}
+.qt-r .ql{color:var(--muted)}
+.qt-r .qv{font-weight:700;font-variant-numeric:tabular-nums}
+.qt-r.discount .qv{color:var(--green)}
+.qt-big{display:flex;justify-content:space-between;align-items:center;gap:12px;background:linear-gradient(120deg,#0d3a5c,#11507e);color:#fff;padding:13px 18px}
+.qt-big .ql{font-size:13px;font-weight:800;letter-spacing:.05em}
+.qt-big .qv{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
+.qt-big .qv small{display:block;font-size:10.5px;font-weight:600;color:#a9c6da;letter-spacing:.02em;margin-top:2px}
+.qt-note{padding:9px 18px;font-size:11px;color:var(--faint);background:#f7fafc;border-top:1px solid #e8eef3;line-height:1.65}
+
+.q-roi{margin-top:20px;border:1px solid #cfe8dc;background:#f3faf6;border-radius:9px;padding:13px 16px}
+.q-roi h4{font-size:12px;color:var(--green);font-weight:800;letter-spacing:.05em;margin-bottom:7px}
+.q-roi ul{list-style:none}
+.q-roi li{font-size:12px;color:#27443a;line-height:1.75;padding-left:15px;position:relative}
+.q-roi li::before{content:'▸';position:absolute;left:0;color:var(--green)}
+
+.q-terms{margin-top:20px}
+.q-terms h4{font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--faint);margin-bottom:8px}
+.q-terms ol{margin-left:18px;font-size:11.5px;color:#3d5265;line-height:1.8;display:grid;gap:1px}
+
+.q-sign{margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.qs{border:1px dashed #c3d0da;border-radius:9px;padding:13px 15px;font-size:11.5px;color:var(--muted);line-height:2.1}
+.qs b{color:var(--ink);font-size:12.5px;display:block;margin-bottom:2px}
+.q-foot-note{margin-top:16px;text-align:center;font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+
+.q-modal-bar{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid var(--rule);background:#f7fafc}
+
+@media (max-width:700px){
+  .q-overlay{padding:14px 10px 30px}
+  .q-doc{padding:20px 16px 18px}
+  .q-doc-head h2{font-size:19px;letter-spacing:.1em}
+  .q-no{font-size:11px}
+  .q-meta{grid-template-columns:repeat(2,1fr)}
+  .q-sign{grid-template-columns:1fr}
+}
+@media print{
+  body.q-lock>*:not(.q-overlay){display:none!important}
+  .q-overlay{position:static;display:block;background:none;padding:0;overflow:visible;animation:none}
+  .q-modal{display:block;max-width:none;max-height:none;box-shadow:none;border-radius:0;animation:none}
+  .q-doc{overflow:visible;padding:0}
+  .q-modal-bar{display:none}
+  .q-tbl th,.qt-big,.q-logo{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:12mm}
+}
+
+/* ---------- design proposal ---------- */
+.d-cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.d-note-h{font-size:12px;font-weight:800;color:#2b4257;margin-bottom:8px;display:flex;align-items:baseline;gap:8px}
+.d-note-h small{font-size:10.5px;color:var(--faint);font-weight:600;letter-spacing:.06em}
+.d-ul{list-style:none;display:grid;gap:7px}
+.d-ul li{font-size:12px;color:#33475b;line-height:1.65;padding-left:15px;position:relative}
+.d-ul li::before{content:'▪';position:absolute;left:0;color:var(--accent)}
+.prin{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.prin-c{border:1px solid #dbe5ec;border-radius:9px;padding:12px 13px;background:#fafcfe}
+.prin-c b{font-size:12.5px;display:flex;gap:8px;align-items:center;margin-bottom:6px;color:#1e3a4f}
+.prin-c b i{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,#1a6fb5,#0a2c48);color:#fff;display:grid;place-items:center;font-style:normal;font-size:10.5px;font-weight:800;flex:0 0 auto}
+.prin-c p{font-size:11px;color:var(--muted);line-height:1.7}
+
+.d-arch{margin-top:4px;border:1px solid #cdd9e3;border-radius:9px;overflow:hidden}
+.arch-row{display:grid;grid-template-columns:112px 1fr}
+.arch-row+.arch-row{border-top:1px solid #e3ebf1}
+.arch-l{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#f2f6fa;border-right:1px solid #e3ebf1;padding:10px 6px;text-align:center}
+.arch-l b{font-size:12.5px;color:#23415a;letter-spacing:.04em}
+.arch-l span{font-size:9.5px;color:var(--faint);letter-spacing:.1em}
+.arch-r{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:12px 14px;background:#fff}
+.arch-box{font-size:11px;font-weight:650;color:#2b4b66;background:#f5f9fc;border:1px solid #d5e3ee;border-radius:6px;padding:5px 10px;white-space:nowrap}
+.arch-box.hl{background:#eef4fb;border-color:#b9d4ea;color:#0d5ba4;font-weight:800}
+.arch-cap{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.65}
+
+.d-flow{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:4px}
+.fs{background:#f7fafc;border:1px solid #d9e4ec;border-radius:8px;padding:10px 11px}
+.fs .fno{font-size:9.5px;font-weight:800;letter-spacing:.12em;color:var(--faint)}
+.fs b{display:block;font-size:12px;margin:3px 0;color:#1e3a4f}
+.fs span{font-size:10.5px;color:var(--muted);line-height:1.55;display:block}
+
+.d-mech{margin-top:14px;border:1px dashed #c3d3df;border-radius:8px;padding:12px 15px;background:#fafcfd}
+
+.hchain{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:6px}
+.hc{font-size:11.5px;font-weight:700;color:#2b4b66;background:#f5f9fc;border:1px solid #d5e3ee;border-radius:999px;padding:5px 12px;white-space:nowrap}
+.hc.ai{background:#eef4fb;border-color:#b9d4ea;color:#0d5ba4}
+.hc.man{background:#f3faf6;border-color:#cfe8dc;color:#0c7a5c}
+.ha{color:#8fa6b5;font-weight:800;font-size:12px}
+.h-leg{display:flex;gap:14px;margin-top:10px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.h-leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+.mile{list-style:none;margin-top:6px;border-left:2px solid #cfe0ec;padding-left:20px}
+.mile li{position:relative;padding-bottom:15px}
+.mile li:last-child{padding-bottom:3px}
+.mile li::before{content:'';position:absolute;left:-27px;top:3px;width:11px;height:11px;border-radius:50%;background:#fff;border:3px solid var(--accent)}
+.mile li.fin::before{border-color:var(--green)}
+.mile .mt{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mile .mt b{font-size:12.5px;color:#1e3a4f}
+.m-tag{font-size:9.5px;font-weight:800;color:#fff;background:#5b7f9c;padding:2px 7px;border-radius:4px;letter-spacing:.04em;white-space:nowrap}
+.mile li.fin .m-tag{background:var(--green)}
+.mile p{font-size:11.5px;color:var(--muted);line-height:1.65;margin-top:4px}
+.m-deliv{font-size:10.5px;color:#27443a;background:#f3faf6;border:1px solid #d5e9df;border-radius:6px;padding:3px 9px;margin-top:6px;display:inline-block}
+
+.d-sign{margin-top:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+
+@media (max-width:700px){
+  .d-cols2{grid-template-columns:1fr}
+  .prin{grid-template-columns:1fr}
+  .arch-row{grid-template-columns:86px 1fr}
+  .d-flow{grid-template-columns:repeat(2,1fr)}
+  .d-sign{grid-template-columns:1fr}
+}
+@media print{
+  .arch-l,.m-tag,.prin-c b i,.hc.ai,.hc.man{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+@media (max-width:1000px){
+  .pipeline{position:relative}
+  .pipeline::after{content:'';position:absolute;top:0;right:0;bottom:0;width:30px;background:linear-gradient(90deg,rgba(255,255,255,0),var(--panel));pointer-events:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .live.busy i,.step.run .dot{animation:none}
+}
+
+@media (max-width:1020px){
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .workspace{grid-template-columns:1fr}
+  .queue{position:static}
+  .q-list{max-height:none}
+  .d-cols{grid-template-columns:1fr}
+  .parkmeta{display:none}
+}
+@media (max-width:700px){
+  .topbar-in,.pipeline-in,.kpis,.workspace,.foot{padding-left:16px;padding-right:16px}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .detail{padding:18px 16px}
+  .d-title{font-size:16px}
+  .brand-s{display:none}
+}
+</style>
+</head>
+<body>
+
+<noscript><div class="nojs">本页为交互式诊断演示，需启用 JavaScript 才能运行模拟数据生成、异常检测与处置流程；当前仅显示静态框架。</div></noscript>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="logo">E</div>
+      <div>
+        <h1 class="brand-t">园区异常定位诊断台</h1>
+        <div class="brand-s">Park Energy Anomaly Console</div>
+      </div>
+    </div>
+    <div class="parkmeta">
+      <span><b>江湾智造园</b> · B 区</span>
+      <span>2026-10-01 → 10-30</span>
+      <span>8 只表计 · 15 min</span>
+      <span>电价 0.75 元/kWh</span>
+    </div>
+    <div class="topbar-act">
+      <span class="live" id="live"><i></i><span id="liveT">就绪</span></span>
+      <button class="btn tbq" id="designBtn">设计方案</button>
+      <button class="btn tbq" id="quoteBtn">报价方案</button>
+      <button class="btn primary" id="runBtn">运行诊断</button>
+    </div>
+  </div>
+</header>
+
+<section class="pipeline">
+  <div class="pipeline-in" id="pipeline"></div>
+</section>
+
+<section class="kpis" id="kpis"></section>
+
+<div class="workspace">
+  <aside class="queue">
+    <div class="q-head">
+      <div class="q-head-r">
+        <h2>异常队列 <span id="qcount">—</span></h2>
+      </div>
+      <div class="chips" id="filters">
+        <button class="chip on" data-filter="all">全部</button>
+        <button class="chip" data-filter="pending">待确认</button>
+        <button class="chip" data-filter="high">高置信</button>
+        <button class="chip" data-filter="done">已处置</button>
+      </div>
+    </div>
+    <div class="q-list" id="queueList"></div>
+    <div class="q-tip">按置信度排序。AI 仅输出「候选根因 + 证据链」，处置须人工确认。</div>
+  </aside>
+
+  <main class="detail">
+    <div class="empty" id="emptyState">
+      <div>
+        <div class="e-i">!</div>
+        <div class="e-t">尚未运行诊断</div>
+        <div class="e-s">点击右上角「运行诊断」，系统将依次完成数据治理、分项归集、负荷对比与异常定位。</div>
+      </div>
+    </div>
+    <div id="detailBody"></div>
+  </main>
+</div>
+
+<footer class="foot">
+  <div><b>合规边界</b>　只读监测：不下发断电指令、不自动计费，节能措施须人工审核后执行。</div>
+  <div><b>数据声明</b>　本页使用内置模拟数据（8 表计 / 30 天 / 15 分钟 / 23,040 点），用于演示诊断流程。</div>
+  <div><b>对应报告</b>　《中国园区智慧能源管理行业深度研究报告（2023–2026）》4.5 异常定位要点、4.6 流程对照、附录 A.4 选型建议。</div>
+  <div><b>方案文档</b>　系统总体设计方案（架构 / 检测规则 / 实施里程碑）：<button class="flink" id="designLink">查看设计方案</button>。</div>
+  <div><b>商务信息</b>　本系统软件订阅与实施服务报价：<button class="flink" id="quoteLink">查看报价单</button>。</div>
+</footer>
+
+<!-- ============ 报价单弹窗 ============ -->
+<div class="q-overlay" id="quoteOverlay" role="dialog" aria-modal="true" aria-labelledby="quoteTitle" hidden>
+  <div class="q-modal">
+    <div class="q-doc">
+
+      <div class="q-doc-head">
+        <div class="q-brand">
+          <div class="q-logo">E</div>
+          <div>
+            <h2 id="quoteTitle">报价单</h2>
+            <div class="q-sub">Quotation · 园区异常定位诊断台</div>
+          </div>
+        </div>
+        <div class="q-no">
+          <div>报价编号　<b id="qNo">PE-QT-20261105-001</b></div>
+          <div>币　　种　<b>人民币 CNY</b></div>
+        </div>
+      </div>
+
+      <div class="q-meta">
+        <div class="qm"><b>报价方</b><span>埃诺能源科技有限公司 · 智慧园区事业部</span></div>
+        <div class="qm"><b>客户</b><span>江湾智造园（B 区）</span></div>
+        <div class="qm"><b>报价日期</b><span id="qDate">2026-11-05</span></div>
+        <div class="qm"><b>有效期</b><span id="qValid">30 天</span></div>
+      </div>
+
+      <p class="q-scope">适用范围：江湾智造园 B 区 · 8 只表计（1 总表 + 7 分表）· 4 分项 / 7 回路 · 15 分钟采集粒度 · 电价 0.75 元/kWh 口径。功能范围与本页演示一致。</p>
+
+      <div class="q-sec">
+        <h3>一、软件服务（SaaS 订阅）<small>首年费用 · 年付</small></h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>序号</th><th>服务项目</th><th>规格说明</th><th>计费方式</th><th class="r">金额</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="no">01</td>
+                <td class="item">诊断平台订阅</td>
+                <td class="desc">异常定位引擎（倍率 / 账实 / 归属 / 基线 / 疑似五类检测）、证据链与候选根因、影响估算、KPI 驾驶舱与趋势图表</td>
+                <td class="bill">按年</td>
+                <td class="amt">¥28,000<small>／年</small></td>
+              </tr>
+              <tr>
+                <td class="no">02</td>
+                <td class="item">计量数据接入</td>
+                <td class="desc">8 只表计 · 15 分钟粒度（约 2.3 万点/月）· 倍率台账与换表变更管理</td>
+                <td class="bill">8 只 × ¥1,200</td>
+                <td class="amt">¥9,600<small>／年</small></td>
+              </tr>
+            </tbody>
+            <tfoot><tr><td colspan="4">软件服务小计（首年）</td><td>¥37,600</td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>二、实施服务（一次性）</h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>序号</th><th>服务项目</th><th>规格说明</th><th>计费方式</th><th class="r">金额</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="no">03</td>
+                <td class="item">数据接入调试</td>
+                <td class="desc">8 表计通信联调、点位核对、历史数据回补</td>
+                <td class="bill">一次性</td>
+                <td class="amt">¥8,000</td>
+              </tr>
+              <tr>
+                <td class="no">04</td>
+                <td class="item">台账与分项配置</td>
+                <td class="desc">倍率台账梳理（8 条）、分项 / 回路归属核对（7 回路 × 4 分项）</td>
+                <td class="bill">一次性</td>
+                <td class="amt">¥5,000</td>
+              </tr>
+              <tr>
+                <td class="no">05</td>
+                <td class="item">基线与阈值标定</td>
+                <td class="desc">工作日 / 周末形态基线、总表—分表差异率 1% 阈值、置信度门槛</td>
+                <td class="bill">一次性</td>
+                <td class="amt">¥4,000</td>
+              </tr>
+              <tr>
+                <td class="no">06</td>
+                <td class="item">培训与陪跑</td>
+                <td class="desc">异常处置流程培训 2 场 + 首月诊断陪跑（每周复盘）</td>
+                <td class="bill">一次性</td>
+                <td class="amt">¥3,000</td>
+              </tr>
+            </tbody>
+            <tfoot><tr><td colspan="4">实施服务小计</td><td>¥20,000</td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>三、增值服务（可选）<small>按需选购 · 未计入总价</small></h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>序号</th><th>服务项目</th><th>规格说明</th><th>计费方式</th><th class="r">金额</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="no">07</td>
+                <td class="item">分项 / 回路扩容</td>
+                <td class="desc">新增计量点接入，归属台账与分项归集同步更新</td>
+                <td class="bill">每回路</td>
+                <td class="amt">¥800<small>／年</small></td>
+              </tr>
+              <tr>
+                <td class="no">08</td>
+                <td class="item">电价与账单对接</td>
+                <td class="desc">分时电价配置，与园区电费账单口径对齐</td>
+                <td class="bill">按年</td>
+                <td class="amt">¥2,000<small>／年</small></td>
+              </tr>
+              <tr>
+                <td class="no">09</td>
+                <td class="item">专家月度报告</td>
+                <td class="desc">工程师复核异常队列，输出月度诊断与整改建议</td>
+                <td class="bill">每月</td>
+                <td class="amt">¥1,500<small>／月</small></td>
+              </tr>
+              <tr>
+                <td class="no">10</td>
+                <td class="item">历史数据迁移</td>
+                <td class="desc">既有系统 ≤ 2 年历史数据清洗与回补</td>
+                <td class="bill">一次性</td>
+                <td class="amt">¥6,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="q-total">
+        <div class="qt-rows">
+          <div class="qt-r"><span class="ql">软件服务（首年）</span><span class="qv">¥37,600</span></div>
+          <div class="qt-r"><span class="ql">实施服务（一次性）</span><span class="qv">¥20,000</span></div>
+          <div class="qt-r"><span class="ql">首年合计</span><span class="qv">¥57,600</span></div>
+          <div class="qt-r discount"><span class="ql">签约优惠（演示期签约 95 折）</span><span class="qv">−¥2,880</span></div>
+        </div>
+        <div class="qt-big">
+          <span class="ql">首年应付（含税）</span>
+          <span class="qv">¥54,720<small>次年起 ¥37,600 ／年</small></span>
+        </div>
+        <div class="qt-note">注：增值服务按需选购，未计入总价；含增值税专用发票；表计超出 8 只部分按 ¥1,500/只/年计。</div>
+      </div>
+
+      <div class="q-roi">
+        <h4>收益测算（演示口径 · 基于本页模拟数据）</h4>
+        <ul>
+          <li>演示 30 天内系统累计标识可追回 / 追补电费 ¥12,773：账实差异漏计 ¥8,076、夜间基线偏离 ¥2,837、疑似待核 ¥1,860。</li>
+          <li>按同口径年化估算约 ¥153,000，约为首年全部费用（¥54,720）的 2.8 倍。</li>
+          <li>倍率错录类风险可即时纠偏：演示场景中换表倍率误录 30 天即虚增计量 ¥241,241，可避免分摊失真与账务纠纷。</li>
+          <li>以上基于内置模拟数据测算，实际收益取决于异常密度、处置及时性与电价口径，不作收益承诺。</li>
+        </ul>
+      </div>
+
+      <div class="q-terms">
+        <h4>报价条款</h4>
+        <ol>
+          <li>本报价含税（增值税专用发票，软件与实施服务适用税率以开票时法规为准）。</li>
+          <li>付款方式：订阅费年付预付；实施服务按合同签订 50%、上线验收 50% 分期支付。</li>
+          <li>交付周期：合同生效后 10 个工作日完成 8 只表计接入联调，15 个工作日完成引擎上线与基线标定。</li>
+          <li>服务等级：工作日 9:00–18:00 电话 / 在线支持，一般故障响应 ≤ 4 小时，重大故障 7×24。</li>
+          <li>数据与合规：平台仅做只读监测，不下发断电指令、不自动计费；节能措施须人工审核后执行。</li>
+          <li>数据归属：园区计量数据归客户所有，服务期内可随时导出，服务期满提供全量迁移。</li>
+          <li>本报价单有效期 30 天，最终以双方签署的正式合同为准。</li>
+        </ol>
+      </div>
+
+      <div class="q-sign">
+        <div class="qs"><b>供方（盖章）</b>埃诺能源科技有限公司<br>授权代表：＿＿＿＿＿＿＿＿<br>日期：＿＿＿＿年＿＿月＿＿日</div>
+        <div class="qs"><b>需方（盖章）</b>江湾智造园<br>授权代表：＿＿＿＿＿＿＿＿<br>日期：＿＿＿＿年＿＿月＿＿日</div>
+      </div>
+
+      <div class="q-foot-note">本报价单由「园区异常定位诊断台」演示页生成 · 仅供商务演示</div>
+    </div>
+
+    <div class="q-modal-bar">
+      <button class="btn ghost small" id="quoteClose">关闭</button>
+      <button class="btn primary small" id="quotePrint">打印 / 导出 PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 设计方案弹窗 ============ -->
+<div class="q-overlay" id="designOverlay" role="dialog" aria-modal="true" aria-labelledby="designTitle" hidden>
+  <div class="q-modal">
+    <div class="q-doc">
+
+      <div class="q-doc-head">
+        <div class="q-brand">
+          <div class="q-logo">E</div>
+          <div>
+            <h2 id="designTitle">设计方案书</h2>
+            <div class="q-sub">Design Proposal · 园区异常定位诊断台</div>
+          </div>
+        </div>
+        <div class="q-no">
+          <div>方案编号　<b id="dsNo">PE-DS-20261105-001</b></div>
+          <div>文档版本　<b>V1.0 · 评审稿</b></div>
+        </div>
+      </div>
+
+      <div class="q-meta">
+        <div class="qm"><b>编制方</b><span>埃诺能源科技有限公司 · 智慧园区事业部</span></div>
+        <div class="qm"><b>客户</b><span>江湾智造园（B 区）</span></div>
+        <div class="qm"><b>编制日期</b><span id="dsDate">2026-11-05</span></div>
+        <div class="qm"><b>文档状态</b><span>评审稿 · 可作为合同技术附件</span></div>
+      </div>
+
+      <p class="q-scope">本方案与演示页功能一一对应，是报价单（PE-QT 系列）的技术附件；覆盖采集、治理、诊断、处置全链路，不含控制指令下发与自动计费。</p>
+
+      <div class="q-sec">
+        <h3>一、项目概述</h3>
+        <div class="d-cols2">
+          <div>
+            <div class="d-note-h">项目目标 <small>Objectives</small></div>
+            <ul class="d-ul">
+              <li>异常发现前置：由人工月度对账提前至系统逐日定位，检出即附证据链与候选根因</li>
+              <li>处置闭环：确认 → 工单 → 派单 → 误报样本池，全过程留痕可撤销</li>
+              <li>金额口径：漏计 / 虚增电量折算电费，支撑追补与账务冲销</li>
+            </ul>
+          </div>
+          <div>
+            <div class="d-note-h">实施范围 <small>Scope</small></div>
+            <ul class="d-ul">
+              <li>江湾智造园 B 区 · 8 只表计（1 进线总表 + 7 分表）</li>
+              <li>4 分项（空调 / 生产 / 办公 / 照明）· 7 回路 · 15 分钟粒度</li>
+              <li>30 天约 23,040 点 · 电价 0.75 元/kWh 口径</li>
+              <li>不含：控制指令下发、自动计费、表计硬件改造</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prin">
+          <div class="prin-c"><b><i>01</i>只读合规</b><p>不下发断电指令、不自动计费；节能措施须人工审核后执行（对应报告 5.2）。</p></div>
+          <div class="prin-c"><b><i>02</i>AI 辅助不决策</b><p>系统输出止于「候选根因 + 证据链」，确认、派单、误报标记均由人工完成。</p></div>
+          <div class="prin-c"><b><i>03</i>可解释可追溯</b><p>每条异常附证据链与置信度；误报进入样本池，反哺规则迭代。</p></div>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>二、总体架构</h3>
+        <div class="d-arch">
+          <div class="arch-row">
+            <div class="arch-l"><b>应用层</b><span>APPLICATION</span></div>
+            <div class="arch-r"><span class="arch-box">KPI 驾驶舱</span><span class="arch-box">异常队列</span><span class="arch-box">证据链详情</span><span class="arch-box">处置闭环（确认 / 派单 / 误报）</span></div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-l"><b>分析引擎层</b><span>ENGINE</span></div>
+            <div class="arch-r"><span class="arch-box hl">五类检测规则</span><span class="arch-box">置信度评分</span><span class="arch-box">归因排序</span><span class="arch-box">影响估算</span></div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-l"><b>数据治理层</b><span>GOVERNANCE</span></div>
+            <div class="arch-r"><span class="arch-box">倍率台账</span><span class="arch-box">换表变更</span><span class="arch-box">分项归集</span><span class="arch-box">漏抄 / 断点校验</span></div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-l"><b>采集层</b><span>CAPTURE</span></div>
+            <div class="arch-r"><span class="arch-box">抄表通信（15 min）</span><span class="arch-box">点位核对</span><span class="arch-box">断点补传</span><span class="arch-box">历史回补</span></div>
+          </div>
+        </div>
+        <p class="arch-cap">数据自下而上逐层加工（15 分钟读数 → 治理口径 → 诊断结论 → 界面呈现）；处置结果自上而下回写台账与误报样本池，形成闭环。逐层可独立升级，检测规则库支持插拔扩展。</p>
+      </div>
+
+      <div class="q-sec">
+        <h3>三、诊断流水线设计<small>与演示页顶部六步一致</small></h3>
+        <div class="d-flow">
+          <div class="fs"><div class="fno">01</div><b>抄表接入</b><span>8 表计 · 15 min · 断点补传</span></div>
+          <div class="fs"><div class="fno">02</div><b>数据治理</b><span>倍率台账 · 换表口径对齐</span></div>
+          <div class="fs"><div class="fno">03</div><b>分项归集</b><span>4 分项 · 7 回路归属映射</span></div>
+          <div class="fs"><div class="fno">04</div><b>负荷对比</b><span>30 天环比 · 形态基线</span></div>
+          <div class="fs"><div class="fno">05</div><b>异常定位</b><span>五类规则并行 · 置信度排序</span></div>
+          <div class="fs"><div class="fno">06</div><b>人工确认</b><span>确认 / 派单 / 误报 · 工单</span></div>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>四、异常检测规则设计</h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>异常类型</th><th>判定逻辑（核心阈值）</th><th>置信度</th><th>处置路径</th></tr></thead>
+            <tbody>
+              <tr><td class="item">倍率异常</td><td class="desc">日用量突变为整数倍且与倍率比值吻合；单回路占总表比例越限（空调类 5%–15%）</td><td class="bill">高（≥ 90%）</td><td class="desc">台账核对工单 · 账务冲销</td></tr>
+              <tr><td class="item">账实差异</td><td class="desc">（总表 − 分表）/ 总表 &gt; 1% 持续 ≥ 3 日；方向判定区分未纳管 / 多计</td><td class="bill">高（约 85%）</td><td class="desc">未纳管负荷排查 · 计量点补装</td></tr>
+              <tr><td class="item">归属错分</td><td class="desc">周末 / 工作日负荷比、夜间基荷比形态判别，与台账分项背离</td><td class="bill">中高（约 79%）</td><td class="desc">分项台账复核 · 回路图核对</td></tr>
+              <tr><td class="item">基线偏离</td><td class="desc">分时段负荷偏离历史基线（夜间 +50% 级）而其余时段持平</td><td class="bill">中（约 74%）</td><td class="desc">策略日志 / 开关时序核查</td></tr>
+              <tr><td class="item">疑似异常</td><td class="desc">样本 &lt; 4 或置信度 &lt; 50%，可能与外部因素（排产 / 天气）吻合</td><td class="bill">低（&lt; 50%）</td><td class="desc">人工核实队列 · 不生成工单</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="d-mech">
+          <div class="d-note-h">通用机制</div>
+          <ul class="d-ul">
+            <li>置信度门槛：≥ 75% 进入人工确认队列；50%–75% 提示待核；&lt; 50% 仅入疑似池</li>
+            <li>交叉排除：每条结论附「排除其他原因」证据（如同期其余表计波动），单证据不定位</li>
+            <li>口径修正：倍率异常回路一经检出，即按标准倍率修正后参与后续合计，避免二次污染</li>
+            <li>误报样本池：标记误报的样本反哺阈值与规则迭代（对应页面「标记误报」动作）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>五、人机协同与合规边界</h3>
+        <div class="hchain">
+          <span class="hc ai">引擎检出</span><span class="ha">→</span>
+          <span class="hc ai">候选根因 + 证据链</span><span class="ha">→</span>
+          <span class="hc ai">置信度 ≥ 75%？</span><span class="ha">→</span>
+          <span class="hc man">人工确认</span><span class="ha">→</span>
+          <span class="hc man">工单 / 派单</span><span class="ha">→</span>
+          <span class="hc man">现场复核回写</span><span class="ha">→</span>
+          <span class="hc man">误报入样本池</span><span class="ha">→</span>
+          <span class="hc ai">规则迭代</span>
+        </div>
+        <div class="h-leg"><span><i style="background:#eef4fb;border:1px solid #b9d4ea"></i>系统自动</span><span><i style="background:#f3faf6;border:1px solid #cfe8dc"></i>人工动作</span></div>
+        <ul class="d-ul" style="margin-top:12px">
+          <li>系统输出止于「候选根因 + 证据链」，确认、派单、误报标记均须人工操作</li>
+          <li>不下发断电等控制指令、不自动计费；节能措施须人工审核后执行</li>
+          <li>全过程留痕：每条处置记录操作人、时间与备注，支持撤销重置（演示页可体验）</li>
+        </ul>
+      </div>
+
+      <div class="q-sec">
+        <h3>六、实施里程碑<small>与报价单交付周期对应</small></h3>
+        <ul class="mile">
+          <li>
+            <div class="mt"><span class="m-tag">T0–T3</span><b>台账梳理与准备</b></div>
+            <p>点位清单确认、倍率台账核对（8 条）、分项归属复核；缺失项挂起标注，不参与归因。</p>
+            <span class="m-deliv">交付物：计量台账基线表</span>
+          </li>
+          <li>
+            <div class="mt"><span class="m-tag">T3–T10</span><b>数据接入联调</b></div>
+            <p>8 表计通信联调、断点补传、历史数据回补（≤ 2 年可选，对应增值项 10）。</p>
+            <span class="m-deliv">交付物：接入验收报告（数据完整率 ≥ 99%）</span>
+          </li>
+          <li>
+            <div class="mt"><span class="m-tag">T8–T12</span><b>引擎配置与基线标定</b></div>
+            <p>差异率阈值 1%、工作日 / 周末形态基线、置信度门槛 75% 标定。</p>
+            <span class="m-deliv">交付物：规则配置单</span>
+          </li>
+          <li>
+            <div class="mt"><span class="m-tag">T13–T15</span><b>试运行与验收</b></div>
+            <p>30 天历史数据回放诊断，评估检出率与误报率，双方确认验收标准。</p>
+            <span class="m-deliv">交付物：试运行报告 + 验收单</span>
+          </li>
+          <li class="fin">
+            <div class="mt"><span class="m-tag">上线后 1 个月</span><b>培训与陪跑</b></div>
+            <p>处置流程培训 2 场、每周复盘会（对应报价 06 项），输出首月运行月报。</p>
+            <span class="m-deliv">交付物：首月运行月报</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="q-sec">
+        <h3>七、非功能设计</h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>维度</th><th>设计指标</th></tr></thead>
+            <tbody>
+              <tr><td class="item">性能</td><td class="desc">单园区 30 天全量数据（约 2.3 万点）诊断 ≤ 1 分钟；新到数据 15 分钟内完成增量检测</td></tr>
+              <tr><td class="item">可靠性</td><td class="desc">断点补传 + 漏抄检测双重校验；缺数日自动剔除出基线统计，避免误判</td></tr>
+              <tr><td class="item">安全</td><td class="desc">只读接入；计量数据归属客户、可全量导出；处置操作全量审计（操作人 / 时间 / 备注）</td></tr>
+              <tr><td class="item">扩展性</td><td class="desc">表计与回路水平扩容（对应增值项 07）；检测规则库可插拔新增类型</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="q-sec">
+        <h3>八、风险与应对</h3>
+        <div class="q-tblwrap">
+          <table class="q-tbl">
+            <thead><tr><th>风险</th><th>等级</th><th>应对措施</th></tr></thead>
+            <tbody>
+              <tr><td class="item">倍率 / 归属台账缺失或不准</td><td><span class="tag high">高</span></td><td class="desc">M1 阶段现场核对；缺失回路挂起，不参与归因与追补计算</td></tr>
+              <tr><td class="item">采集断点导致数据缺口</td><td><span class="tag mid">中</span></td><td class="desc">漏抄检测自动标记；缺数日不参与基线，避免误判</td></tr>
+              <tr><td class="item">试运行期误报率偏高</td><td><span class="tag mid">中</span></td><td class="desc">人工标注误报入样本池，迭代阈值与置信度模型</td></tr>
+              <tr><td class="item">排产 / 天气等外部因素干扰</td><td><span class="tag low">低</span></td><td class="desc">疑似通道隔离（&lt; 75% 不生成工单），人工核实后才计入收益</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="d-sign">
+        <div class="qs"><b>编制</b>方案组 · ＿＿＿＿＿＿<br>日期：＿＿＿＿年＿＿月＿＿日</div>
+        <div class="qs"><b>审核</b>技术负责人 · ＿＿＿＿＿＿<br>日期：＿＿＿＿年＿＿月＿＿日</div>
+        <div class="qs"><b>批准</b>需方项目负责人 · ＿＿＿＿＿＿<br>日期：＿＿＿＿年＿＿月＿＿日</div>
+      </div>
+
+      <div class="q-foot-note">本设计方案由「园区异常定位诊断台」演示页生成 · 仅供评审与商务演示</div>
+    </div>
+
+    <div class="q-modal-bar">
+      <button class="btn ghost small" id="designClose">关闭</button>
+      <button class="btn primary small" id="designPrint">打印 / 导出 PDF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   0. 基础工具
+   ========================================================= */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var rand = mulberry32(20261001);
+var DAYS = 30, PRICE = 0.75;
+var nf = function(v,d){ d = d || 0; return Number(v).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+var esc = function(s){ return String(s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var sum = function(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s; };
+var avg = function(a){ return a.length ? sum(a)/a.length : 0; };
+var slice = function(a,f,t){ return Array.prototype.slice.call(a,f,t); };
+function isWeekend(d){ var w = new Date(2026,9,1+d).getDay(); return w===0 || w===6; }
+function dlabel(d){ return '10-' + String(d+1).padStart(2,'0'); }
+var WEEKDAY_NAMES = ['日','一','二','三','四','五','六'];
+
+/* =========================================================
+   1. 表计台账 + 模拟数据生成
+   ========================================================= */
+var METERS = [
+  {id:'main', code:'M-MAIN-01', name:'B 区进线总表', branch:'总表', mult:200},
+  {id:'ac1',  code:'M-AC-01',   name:'空调 A 区',    branch:'空调', mult:40},
+  {id:'ac2',  code:'M-AC-02',   name:'空调 B 区',    branch:'空调', mult:8},
+  {id:'pr1',  code:'M-PR-01',   name:'生产一线',      branch:'生产', mult:25},
+  {id:'pr2',  code:'M-PR-02',   name:'生产二线',      branch:'生产', mult:20},
+  {id:'pr3',  code:'M-PR-03',   name:'空压机回路',    branch:'办公', mult:16},
+  {id:'lt1',  code:'M-LT-01',   name:'照明',          branch:'照明', mult:4},
+  {id:'of1',  code:'M-OF-01',   name:'办公',          branch:'办公', mult:6}
+];
+var SUB = ['ac1','ac2','pr1','pr2','pr3','lt1','of1'];
+var M = {};
+METERS.forEach(function(m){
+  M[m.id] = {
+    id:m.id, code:m.code, name:m.name, branch:m.branch, mult:m.mult,
+    daily:new Float64Array(DAYS),
+    hourly:Array.from({length:DAYS},function(){ return new Float64Array(24); }),
+    nightKw:new Float64Array(DAYS)
+  };
+});
+
+/* 负荷形态（kW）：工作日/周末、时段差异都体现回路属性 */
+function kwProfile(id,h,d,wk,av){
+  switch(id){
+    case 'ac1': return (h<6?38:h<8?86:h<18?168:h<22?96:44) * av;
+    case 'ac2': return (h<6?30:h<8?64:h<18?122:h<22?74:34) * av;
+    case 'pr1': { var b1 = h<8?206:h<20?252:198; return b1*(wk?0.65:1); }
+    case 'pr2': {
+      var b2 = h<8?150:h<20?188:168;
+      var f = wk?0.65:1;
+      if(d===23 || d===24) f = wk?0.95:1;   /* 疑似：周末加班排产 */
+      return b2*f;
+    }
+    case 'pr3': { var b3 = h<6?70:h<22?95:74; return b3*(wk?0.87:1); }
+    case 'lt1':
+      if(d>=15) return h<6?44:h<8?34:h<18?38:h<22?48:44;   /* 异常：夜间未关灯（10-16 起） */
+      return h<6?12:h<8?30:h<18?38:h<22?48:14;
+    case 'of1': return wk?22:(h<8?16:h<19?135:h<22?40:20);
+  }
+  return 0;
+}
+
+var acVar = [];
+for(var d0=0; d0<DAYS; d0++) acVar.push(0.88 + 0.24*rand());
+
+for(var d=0; d<DAYS; d++){
+  var wk = isWeekend(d), av = acVar[d];
+  for(var s=0; s<96; s++){
+    var h = Math.floor(s/4), subsum = 0;
+    for(var k=0; k<SUB.length; k++){
+      var id = SUB[k];
+      var noise = 1 + (rand()-0.5)*0.05;
+      var e = kwProfile(id,h,d,wk,av) * 0.25 * noise;
+      M[id].daily[d] += e;
+      M[id].hourly[d][h] += e;
+      subsum += e;
+    }
+    var unm = (d>=19 ? 40 : 0) * 0.25 * (1 + (rand()-0.5)*0.03);  /* 未纳管：10-20 新增涂装线 */
+    var me = (subsum + unm) * 1.009;                              /* 1% 以内线损/公共 */
+    M.main.daily[d] += me;
+    M.main.hourly[d][h] += me;
+  }
+}
+
+for(var d1=0; d1<DAYS; d1++){
+  var nk = 0;
+  for(var hh=0; hh<24; hh++){
+    if(hh>=22 || hh<6) nk += M.lt1.hourly[d1][hh];
+  }
+  M.lt1.nightKw[d1] = nk/8;
+}
+
+/* 系统计量值：换表后倍率台账误录为 80（标准 8），用量被放大 10 倍 */
+var compAc2 = Array.from(M.ac2.daily).map(function(v,dd){ return dd>=11 ? v*10 : v; });
+var compPr2 = Array.from(M.pr2.daily);
+var subtotalTrue = function(dd){
+  return SUB.reduce(function(a,id){ return a + M[id].daily[dd]; }, 0);
+};
+var diffPct = Array.from({length:DAYS}, function(_,dd){
+  return (M.main.daily[dd] - subtotalTrue(dd)) / M.main.daily[dd] * 100;
+});
+var labels = Array.from({length:DAYS}, function(_,i){ return dlabel(i); });
+
+/* =========================================================
+   2. 检测 + 归因（4 类 + 1 疑似）
+   ========================================================= */
+var preAc   = avg(slice(compAc2,4,11));
+var postAc  = avg(slice(compAc2,11,18));
+var jump    = postAc/preAc;
+var mainAvg = avg(slice(M.main.daily,11,18));
+var acShare = postAc/mainAvg*100;
+var overKwh = sum(slice(compAc2,11)) - sum(slice(M.ac2.daily,11));
+
+var diffPre  = avg(slice(diffPct,4,19));
+var diffPost = avg(slice(diffPct,19,30));
+var leakDaily = 0;
+for(var i2=19;i2<30;i2++){ leakDaily += (M.main.daily[i2] - subtotalTrue(i2)); }
+leakDaily = leakDaily/11;
+/* 基线差值：新增涂装线之前的既有线损，用于从差值中剥离出真实新增负荷 */
+var leakBase = 0;
+for(var i5=4;i5<19;i5++){ leakBase += (M.main.daily[i5] - subtotalTrue(i5)); }
+leakBase = leakBase/15;
+var leakNet = leakDaily - leakBase;
+
+function wRatio(id){
+  var wkA=[], wdA=[];
+  for(var i=0;i<DAYS;i++) (isWeekend(i)?wkA:wdA).push(M[id].daily[i]);
+  return avg(wkA)/avg(wdA);
+}
+var rPr1 = wRatio('pr1'), rPr2 = wRatio('pr2'), rPr3 = wRatio('pr3'), rOf1 = wRatio('of1');
+var pr3Night = avg(slice(M.pr3.hourly,0,30).map(function(a){
+  return (a[22]+a[23]+a[0]+a[1]+a[2]+a[3]+a[4]+a[5])/8;
+}));
+
+var nightPre  = avg(slice(M.lt1.nightKw,0,15));
+var nightPost = avg(slice(M.lt1.nightKw,15,30));
+var dayAvgPre = avg(slice(M.lt1.hourly,0,15).map(function(a){
+  var s=0; for(var h=8;h<18;h++) s+=a[h]; return s/10;
+}));
+var dayAvgPost = avg(slice(M.lt1.hourly,15,30).map(function(a){
+  var s=0; for(var h=8;h<18;h++) s+=a[h]; return s/10;
+}));
+
+var wkIdx=[], wdIdx=[];
+for(var i3=0;i3<DAYS;i3++) (isWeekend(i3)?wkIdx:wdIdx).push(i3);
+var pr2WkAvg = avg(wkIdx.map(function(i){ return M.pr2.daily[i]; }));
+var pr2WdAvg = avg(wdIdx.map(function(i){ return M.pr2.daily[i]; }));
+var pr2WeekendRatio = pr2WkAvg/pr2WdAvg;
+var spikeIdx = wkIdx.filter(function(i){ return M.pr2.daily[i]/pr2WdAvg > 0.85; });
+var spikeRatio = avg(spikeIdx.map(function(i){ return M.pr2.daily[i]; }))/pr2WdAvg;
+var spikeAvg = avg(spikeIdx.map(function(i){ return M.pr2.daily[i]; }));
+var spikeBase = pr2WdAvg*0.65;
+
+/* 同期波动：换表前后各 7 日，排除异常回路与照明 */
+var otherVarMax = 0;
+['ac1','pr1','pr2','pr3','of1'].forEach(function(id){
+  var p = avg(slice(M[id].daily,4,11)), q = avg(slice(M[id].daily,11,18));
+  otherVarMax = Math.max(otherVarMax, Math.abs(q/p-1)*100);
+});
+/* 照明（A4 异常回路）单独计量，不混入「其余表计」的排除证据 */
+var lt1Var = (function(){ var p = avg(slice(M.lt1.daily,4,11)), q = avg(slice(M.lt1.daily,11,18)); return (q/p-1)*100; })();
+
+/* 账实差值的日内波动率 */
+var dv = [];
+for(var i4=19;i4<30;i4++) dv.push(M.main.daily[i4]-subtotalTrue(i4));
+var dvMean = avg(dv);
+var dvStd = Math.sqrt(avg(dv.map(function(v){ return (v-dvMean)*(v-dvMean); })));
+var diffVol = dvStd/dvMean*100;
+
+/* 空压机基荷比：夜间均值 / 日间均值 */
+var pr3Peak = avg(slice(M.pr3.hourly,0,30).map(function(a){
+  var s=0; for(var h=9;h<17;h++) s+=a[h]; return s/8;
+}));
+var pr3BaseRatio = pr3Night/pr3Peak;
+var of1BaseRatio = avg(slice(M.of1.hourly,0,30).map(function(a){
+  var night=(a[22]+a[23]+a[0]+a[1]+a[2]+a[3]+a[4]+a[5])/8;
+  var day=0; for(var h=9;h<17;h++) day+=a[h];
+  return night/(day/8);
+}));
+
+var FINDINGS = [
+  {
+    id:'A1', type:'倍率异常', sev:'high', sevLabel:'高置信', conf:96, money:0,
+    meter:'M-AC-02 · 空调 B 区', branch:'空调',
+    firstSeen:'2026-10-12 09:30',
+    title:'空调 B 区回路用量突增 10 倍，指向换表倍率未更新',
+    summary:'10-12 09:20 完成换表后，M-AC-02 计量用量由日均 '+nf(preAc)+' kWh 跃升至 '+nf(postAc)+' kWh，达原值的 '+nf(jump,1)+' 倍（与倍率比 10 倍一致，日间差异来自天气波动）；单回路用量已达 B 区总表全天的 '+nf(acShare,1)+'%，量级与倍率差完全吻合，指向新表倍率台账录入错误。',
+    chart:{
+      kind:'line', unit:'kWh',
+      title:'M-AC-02 日用量：系统计量 vs 按标准倍率修正',
+      series:[
+        {name:'系统计量（台账倍率 80）', color:'#c2410c', v:compAc2},
+        {name:'按标准倍率 8 修正', color:'#0d5ba4', v:Array.from(M.ac2.daily)}
+      ],
+      range:[11,29],
+      threshold:null,
+      note:'数据来源：M-AC-02 15 分钟读数按日汇总。阴影为异常窗口（10-12 至 10-30）。'
+    },
+    evidence:[
+      {label:'用量突变', value:'日用量 '+nf(preAc)+' → '+nf(postAc)+' kWh，<span class="up">+'+nf((jump-1)*100,0)+'%</span>',
+       detail:'10-11 为换表前最后一个完整日，10-12 为换表后首个完整日，跳变无过渡过程。'},
+      {label:'与总表量级矛盾', value:'单回路占用总表 <span class="up">'+nf(acShare,1)+'%</span>（空调类正常区间 5%–15%）',
+       detail:'空调用量超过 B 区进线总表的全部计量电量，物理上不成立。'},
+      {label:'倍率台账', value:'新表台账倍率 <span class="up">80</span>，同型号铭牌标准倍率 8，比值 <b>10</b>',
+       detail:'与用量跳变倍数一致，误差来源可精确对位。',
+       tbl:{head:['表计','倍率','生效日期','备注'],rows:[['旧表 M-AC-02','8','2021-06','正常'],['新表 M-AC-02','80','2026-10-12','换表工单 GT-20261012-01']],mark:{r:1,c:1}}},
+      {label:'排除其他原因', value:'其余 6 只分表中 5 只同期波动 <span class="ok">≤'+nf(otherVarMax,1)+'%</span>，照明 +'+nf(lt1Var,1)+'%',
+       detail:'照明自 10-16 起的抬升已单列为 A4 专项；其余回路平稳，非全园用电增长、非天气因素，仅为单表跳变。'}
+    ],
+    causes:[
+      {name:'换表倍率未更新（台账录入 80，实为 8）', score:88, note:'跳变时点、倍数、量级三重证据一致'},
+      {name:'表计故障或计量芯片异常', score:7, note:'跳变呈精确 10 倍关系，故障通常不产生整数倍偏差'},
+      {name:'数据回传重复累加', score:5, note:'同批次其他表计无重复点，可基本排除'}
+    ],
+    impacts:[
+      {label:'虚增计量（10-12 起）', value:nf(overKwh)+' kWh'},
+      {label:'账务影响（非真实能耗）', value:'¥'+nf(overKwh*PRICE)},
+      {label:'影响天数', value:'19 天'}
+    ]
+  },
+  {
+    id:'A2', type:'账实差异', sev:'high', sevLabel:'高置信', conf:88, money:leakNet*11*PRICE,
+    meter:'M-MAIN-01 · B 区进线总表', branch:'总表',
+    firstSeen:'2026-10-21 08:15',
+    title:'总表比分表合计多计 '+nf(diffPost,1)+'%，疑似新增回路未纳管',
+    summary:'自 10-20 起，总表与分表合计的差异率由 '+nf(diffPre,2)+'% 抬升至 '+nf(diffPost,2)+'%，突破 1% 可信阈值；方向为「分表少计」，差值稳定在约 '+nf(leakDaily)+' kWh/日（剔除既有线损基线后，新增负荷约 '+nf(leakNet)+' kWh/日）。',
+    chart:{
+      kind:'line', unit:'%',
+      title:'总表—分表差异率（逐日，A1 回路已按标准倍率修正）',
+      series:[{name:'差异率', color:'#c2410c', v:diffPct}],
+      range:[19,29],
+      threshold:{v:1, label:'1% 可信阈值'},
+      zero:true,
+      note:'计算口径：差异率 =（总表 − 分表合计修正值）/ 总表。A1 倍率异常回路自 10-12 检出后即按标准倍率 8 修正参与合计（若按台账倍率 80 原始读数，10-12 起差异率将呈约 −85% 的反向偏离）。'
+    },
+    evidence:[
+      {label:'差异率突破阈值', value:nf(diffPre,2)+'% → <span class="up">'+nf(diffPost,2)+'%</span>（阈值 1%）',
+       detail:'10-20 起持续 11 天，非单日抖动。'},
+      {label:'方向判定', value:'总表 <b>大于</b> 分表合计 → <span class="up">存在未纳管负荷</span>',
+       detail:'若为分表多计（如倍率放大），方向相反；本项已剔除 A1 影响。'},
+      {label:'差值形态', value:'日均 '+nf(leakDaily)+' kWh，逐日波动 <span class="ok">±'+nf(diffVol,1)+'%</span>',
+       detail:'其中约 '+nf(leakBase)+' kWh/日为既有线损基线，剔除后新增负荷约 '+nf(leakNet)+' kWh/日；差值逐日恒定，符合新增设备连续运行特征，非线损变化。'},
+      {label:'台账核对', value:'10-20 新增涂装线，<span class="up">未接入任何分表</span>',
+       detail:'改造工单只登记了产能，未同步计量点位。'}
+    ],
+    causes:[
+      {name:'新增回路未纳管（涂装线无计量点）', score:82, note:'差异起始日与投产日一致，差值恒定'},
+      {name:'分表漏抄 / 通信中断', score:11, note:'漏抄通常伴随机零值或断点，本项数据完整'},
+      {name:'线损与公共用电口径调整', score:7, note:'线损为渐进变化，不会单日跳升 5 个百分点'}
+    ],
+    impacts:[
+      {label:'漏计电量（10-20 起，剔除基线）', value:nf(leakNet*11)+' kWh'},
+      {label:'漏计电费', value:'¥'+nf(leakNet*11*PRICE)},
+      {label:'日均新增负荷', value:nf(leakNet)+' kWh'},
+      {label:'差异率', value:nf(diffPost,2)+'%'}
+    ]
+  },
+  {
+    id:'A3', type:'归属错分', sev:'high', sevLabel:'高置信', conf:79, money:0,
+    meter:'M-PR-03 · 空压机回路', branch:'办公（台账标注）',
+    firstSeen:'2026-10-21 08:20',
+    title:'空压机回路被归入「办公」分项，生产用电被低估',
+    summary:'M-PR-03 台账分项为「办公」，但其周末/工作日负荷比 '+nf(rPr3,2)+'、夜间基础负荷 '+nf(pr3Night)+' kW，形态与生产类回路高度一致，与办公类（'+nf(rOf1,2)+'）明显背离。',
+    chart:{
+      kind:'ratio', unit:'',
+      title:'各回路周末 / 工作日负荷比（形态判别）',
+      items:[
+        {label:'生产一线 M-PR-01', value:rPr1, kind:'production'},
+        {label:'生产二线 M-PR-02', value:rPr2, kind:'production'},
+        {label:'空压机 M-PR-03（标注办公）', value:rPr3, kind:'suspect'},
+        {label:'办公 M-OF-01', value:rOf1, kind:'office'}
+      ],
+      note:'阴影为生产类参考区间（0.55–0.95）。M-PR-03 落在生产区间却标注为办公，属分项归属错误。'
+    },
+    evidence:[
+      {label:'形态判别', value:'周末/工作日负荷比 <span class="up">'+nf(rPr3,2)+'</span>（办公类参考 '+nf(rOf1,2)+'）',
+       detail:'空压机随产线运行，周末不停机；办公负载在周末应显著回落。'},
+      {label:'夜间基础负荷', value:nf(pr3Night)+' kW，与生产类空压机常开特征一致',
+       detail:'办公类夜间基础负荷通常低于 25 kW。'},
+      {label:'基荷比', value:'夜间/日间负荷比 <b>'+nf(pr3BaseRatio,2)+'</b>（办公类参考 '+nf(of1BaseRatio,2)+'）',
+       detail:'空压机为连续运行设备，基荷占比高；办公负载夜间应大幅回落。'},
+      {label:'回路图核对', value:'回路位于空压机房配电柜，被手工归入「办公」分项',
+       detail:'分项归集依赖人工台账，缺少回路—分项校验。'}
+    ],
+    causes:[
+      {name:'分项归属错分（空压机误归办公）', score:79, note:'负荷形态 + 基荷比 + 回路位置三项一致'},
+      {name:'回路改造后未更新归属台账', score:14, note:'改造记录缺失，无法完全排除'},
+      {name:'计量串接（共用一路计量）', score:7, note:'若串接，生产与办公负荷会同时异常'}
+    ],
+    impacts:[
+      {label:'办公分项被高估', value:'周末比值 '+nf(rPr3,2)+'（办公类低于 0.35）'},
+      {label:'生产分项被低估', value:nf(sum(Array.from(M.pr3.daily)))+' kWh / ¥'+nf(sum(Array.from(M.pr3.daily))*PRICE)},
+      {label:'受影响报表', value:'分项能耗 · 能效对标'}
+    ]
+  },
+  {
+    id:'A4', type:'基线偏离', sev:'mid', sevLabel:'中置信', conf:74, money:(nightPost-nightPre)*8*15*PRICE,
+    meter:'M-LT-01 · 照明', branch:'照明',
+    firstSeen:'2026-10-18 07:40',
+    title:'照明夜间负荷抬升 250%，疑似定时关灯策略失效',
+    summary:'照明回路 22:00–06:00 负荷由 '+nf(nightPre,1)+' kW 抬升至 '+nf(nightPost,1)+' kW（+'+nf((nightPost/nightPre-1)*100,0)+'%），而白天时段基本持平，指向夜间定时策略被停用或手动常开。',
+    chart:{
+      kind:'line', unit:'kW',
+      title:'M-LT-01 夜间（22:00–06:00）与白天（08:00–18:00）负荷',
+      series:[
+        {name:'夜间负荷', color:'#c2410c', v:Array.from(M.lt1.nightKw)},
+        {name:'白天负荷', color:'#0d5ba4', v:Array.from(M.lt1.hourly).map(function(a){var s=0;for(var h=8;h<18;h++)s+=a[h];return s/10;})}
+      ],
+      range:[15,29],
+      threshold:null,
+      note:'夜间为 8 小时均值功率；白天为 10 小时均值功率。阴影为异常窗口（10-16 起）。'
+    },
+    evidence:[
+      {label:'夜间负荷跳升', value:nf(nightPre,1)+' → <span class="up">'+nf(nightPost,1)+' kW</span>（+'+nf((nightPost/nightPre-1)*100,0)+'%）',
+       detail:'10-16 起持续，非单晚异常。'},
+      {label:'白天无变化', value:nf(dayAvgPre,1)+' → '+nf(dayAvgPost,1)+' kW（<span class="ok">+'+nf((dayAvgPost/dayAvgPre-1)*100,1)+'%</span>）',
+       detail:'排除总用电增长与季节因素，仅夜间时段异常。'},
+      {label:'开关时序', value:'22:00 后负荷未回落，与营业时段开关不一致',
+       detail:'正常照明曲线应在 22:00 后阶梯下降至基础值。'},
+      {label:'策略日志', value:'10-15 照明定时任务 <span class="up">被停用</span>，未恢复',
+       detail:'与负荷抬升时点吻合。'}
+    ],
+    causes:[
+      {name:'定时关灯策略失效 / 被停用', score:74, note:'策略日志与负荷时点吻合'},
+      {name:'手动开启后未关闭', score:18, note:'若为人工，通常呈间歇而非连续'},
+      {name:'照度传感器偏移导致误开', score:8, note:'白天无变化，基本可排除'}
+    ],
+    impacts:[
+      {label:'可追回电量', value:nf((nightPost-nightPre)*8*15)+' kWh'},
+      {label:'可追回电费', value:'¥'+nf((nightPost-nightPre)*8*15*PRICE)},
+      {label:'影响时段', value:'每日 22:00–06:00'}
+    ]
+  },
+  {
+    id:'A5', type:'疑似异常', sev:'low', sevLabel:'低置信', conf:42, money:(spikeAvg-spikeBase)*spikeIdx.length*PRICE,
+    meter:'M-PR-02 · 生产二线', branch:'生产',
+    firstSeen:'2026-10-26 09:10',
+    title:'生产二线周末负荷接近工作日，暂列疑似（样本不足）',
+    summary:'10-24 / 10-25 两日周末负荷达工作日的 '+nf(spikeRatio,2)+'（常态约 0.65），偏离基线；但仅 '+spikeIdx.length+' 个周末样本，且与旺季加班时段重合，需人工核对排产计划。',
+    chart:{
+      kind:'line', unit:'kWh',
+      title:'M-PR-02 日用量（阴影为周末异常日）',
+      series:[{name:'日用量', color:'#b7791f', v:compPr2}],
+      range:[23,24],
+      threshold:{v:pr2WdAvg*0.65, label:'周末基线（工作日 × 0.65）'},
+      note:'虚线为按工作日均值 × 0.65 推算的周末基线。样本仅 2 日，置信度受限。'
+    },
+    evidence:[
+      {label:'周末负荷偏离', value:'异常周末日均 '+nf(spikeAvg)+' kWh vs 工作日 '+nf(pr2WdAvg)+' kWh，比值 <b>'+nf(spikeRatio,2)+'</b>（常态 0.65）',
+       detail:'周末整体比值 '+nf(pr2WeekendRatio,2)+'，其中 10-24 / 10-25 两日显著抬升。'},
+      {label:'样本量不足', value:'仅 '+spikeIdx.length+' 个周末样本（10-24、10-25）',
+       detail:'不足 4 个样本，统计稳定性弱。'},
+      {label:'外部因素', value:'与生产部「旺季加班」排产时段 <span class="ok">吻合</span>',
+       detail:'若排产属实，则属正常用电，应标记误报。'},
+      {label:'置信度', value:'<b>42%</b>（低于自动确认门槛 75%）',
+       detail:'按规则进入人工核实队列，不生成工单。'}
+    ],
+    causes:[
+      {name:'旺季加班排产（正常用电）', score:46, note:'需核对排产单'},
+      {name:'设备异常或常开', score:32, note:'未见单回路持续抬升'},
+      {name:'计量漂移', score:22, note:'同批次无其他表计异常'}
+    ],
+    impacts:[
+      {label:'待核电量', value:nf((spikeAvg-spikeBase)*spikeIdx.length)+' kWh'},
+      {label:'待核电费', value:'¥'+nf((spikeAvg-spikeBase)*spikeIdx.length*PRICE)},
+      {label:'建议', value:'核对排产单'}
+    ]
+  }
+];
+
+/* 初始化处置状态 */
+FINDINGS.forEach(function(f){ f.status = '待确认'; f.log = null; });
+
+/* =========================================================
+   3. 状态 & 渲染
+   ========================================================= */
+var state = { findings:FINDINGS, selected:null, filter:'all', ran:false };
+
+var STEP_DEFS = [
+  {t:'抄表接入', d:'8 表计 · 23,040 点'},
+  {t:'数据治理', d:'倍率台账 8 条 · 换表 1 次'},
+  {t:'分项归集', d:'4 分项 · 7 回路'},
+  {t:'负荷对比', d:'30 天 · 环比 / 同比'},
+  {t:'异常定位', d:'检出 ' + FINDINGS.length + ' 项'},
+  {t:'人工确认', d:'待处置'}
+];
+
+function renderPipeline(activeIdx){
+  var host = document.getElementById('pipeline');
+  var html = '';
+  var done = FINDINGS.filter(function(f){ return f.status!=='待确认'; }).length;
+  for(var i=0;i<STEP_DEFS.length;i++){
+    var cls = 'step';
+    if(activeIdx!==undefined && activeIdx!==null){
+      if(i<activeIdx) cls+=' done';
+      else if(i===activeIdx) cls+=' run';
+    } else if(state.ran){
+      /* 前五步完成即绿；「人工确认」仅在全部处置完后才算完成，否则保持等待态 */
+      if(i<5) cls += ' done';
+      else cls += (done===FINDINGS.length) ? ' done' : ' wait';
+    }
+    var d = STEP_DEFS[i].d;
+    if(i===5){
+      d = '已处置 ' + done + ' / ' + FINDINGS.length;
+    }
+    html += '<div class="'+cls+'"><div class="step-no">'+String(i+1).padStart(2,'0')+'</div>'+
+            '<div class="step-t"><span class="dot"></span>'+STEP_DEFS[i].t+'</div>'+
+            '<div class="step-d">'+d+'</div><div class="step-line"></div></div>';
+  }
+  host.innerHTML = html;
+}
+
+function statusCls(s){
+  return s==='已确认' ? 'st-confirmed' : s==='已派单' ? 'st-dispatched' : s==='疑似误报' ? 'st-dismissed' : 'st-pending';
+}
+
+function filteredFindings(){
+  return FINDINGS.filter(function(f){
+    if(state.filter==='pending') return f.status==='待确认';
+    if(state.filter==='high') return f.conf>=75;
+    if(state.filter==='done') return f.status!=='待确认';
+    return true;
+  }).sort(function(a,b){ return b.conf-a.conf; });
+}
+
+function renderQueue(){
+  var host = document.getElementById('queueList');
+  if(!state.ran){
+    document.getElementById('qcount').textContent = '—';
+    host.innerHTML = '<div class="q-empty">尚未运行诊断</div>';
+    return;
+  }
+  var list = filteredFindings();
+  var st = host.scrollTop;   /* 重建列表时保留滚动位置 */
+
+  document.getElementById('qcount').textContent = list.length + ' 项';
+  if(!list.length){ host.innerHTML = '<div class="q-empty">无匹配异常</div>'; return; }
+
+  host.innerHTML = list.map(function(f){
+    var sevCls = f.sev==='high'?'high':f.sev==='mid'?'mid':'low';
+    return '<button class="qcard'+(state.selected===f.id?' sel':'')+'" data-id="'+f.id+'" data-sev="'+f.sev+'">'+
+      '<div class="qc-top"><span class="tag '+sevCls+'">'+esc(f.sevLabel)+'</span>'+
+      '<span class="tag type">'+esc(f.type)+'</span>'+
+      '<span class="tag '+statusCls(f.status)+'">'+esc(f.status)+'</span></div>'+
+      '<div class="qc-title">'+esc(f.title)+'</div>'+
+      '<div class="qc-sub">'+esc(f.meter)+' · 首次 '+esc(f.firstSeen.slice(0,10))+'</div>'+
+      '<div class="qc-conf"><div class="qc-bar" aria-hidden="true"><i style="width:'+f.conf+'%"></i></div><span aria-label="置信度 '+f.conf+'%">'+f.conf+'%</span></div>'+
+      '</button>';
+  }).join('');
+  host.scrollTop = st;
+}
+
+function fmtTick(cfg){
+  return function(v){
+    if(cfg.unit==='%') return v.toFixed(1)+'%';
+    if(cfg.unit==='kW') return nf(v,0)+' kW';
+    return nf(v,0);
+  };
+}
+
+function lineChart(el, cfg){
+  var W=780, H=320, P={l:58,r:24,t:20,b:38};
+  var n = cfg.x.length;
+  var all = [];
+  cfg.series.forEach(function(s){ all = all.concat(s.v); });
+  var vmin = Math.min.apply(null, all);
+  var vmax = Math.max.apply(null, all);
+  if(cfg.zero) vmin = 0;
+
+  var span = (vmax-vmin) || 1;
+  var step = Math.pow(10, Math.floor(Math.log10(span)));
+  if(span/step < 2) step = step/2;
+  var lo = Math.floor(vmin/step)*step;
+  var hi = Math.ceil(vmax/step)*step;
+  if(cfg.zero) lo = 0;
+  var ticks=[]; for(var t=0;t<=4;t++) ticks.push(lo + (hi-lo)*t/4);
+
+  var y = function(v){ return P.t + (1-(v-lo)/(hi-lo))*(H-P.t-P.b); };
+  var x = function(i){ return P.l + i*(W-P.l-P.r)/(n-1); };
+  var tickFmt = fmtTick(cfg);
+
+  var svg = '';
+  svg += '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="'+esc(cfg.title)+'">';
+
+  ticks.forEach(function(v){
+    svg += '<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#e6edf2" stroke-width="1"/>';
+    svg += '<text x="'+(P.l-9)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="10.5" fill="#5b6c78">'+tickFmt(v)+'</text>';
+  });
+
+  if(cfg.range){
+    var x1 = x(cfg.range[0]), x2 = x(cfg.range[1]);
+    svg += '<rect x="'+x1+'" y="'+P.t+'" width="'+(x2-x1)+'" height="'+(H-P.t-P.b)+'" fill="rgba(194,65,12,.055)"/>';
+    svg += '<line x1="'+x1+'" x2="'+x1+'" y1="'+P.t+'" y2="'+(H-P.b)+'" stroke="#e2b49c" stroke-width="1" stroke-dasharray="3 3"/>';
+    svg += '<text x="'+(x1+6)+'" y="'+(P.t+12)+'" font-size="10" fill="#b45309">异常窗口</text>';
+  }
+
+  if(cfg.threshold){
+    var ty = y(cfg.threshold.v);
+    svg += '<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+ty+'" y2="'+ty+'" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="5 4"/>';
+    svg += '<text x="'+(W-P.r)+'" y="'+(ty-6)+'" text-anchor="end" font-size="10" fill="#94611a">'+esc(cfg.threshold.label)+'</text>';
+  }
+
+  cfg.series.forEach(function(s,si){
+    var pts = s.v.map(function(v,i){ return x(i)+','+y(v); }).join(' ');
+    if(si===0 && cfg.series.length>1){
+      var area = 'M'+x(0)+','+y(lo)+' L' + s.v.map(function(v,i){ return x(i)+','+y(v); }).join(' L') + ' L'+x(n-1)+','+y(lo)+' Z';
+      svg += '<path d="'+area+'" fill="'+s.color+'" opacity="0.06"/>';
+    }
+    svg += '<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(si===0?2.1:1.7)+'" stroke-linejoin="round" stroke-linecap="round" '+(si>0?'stroke-dasharray="5 4"':'')+'/>';
+    s.v.forEach(function(v,i){
+      if(n<=35) svg += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="'+(si===0?2.1:1.7)+'" fill="#fff" stroke="'+s.color+'" stroke-width="1.6"/>';
+    });
+  });
+
+  for(var i=0;i<n;i+=5){
+    svg += '<text x="'+x(i)+'" y="'+(H-P.b+18)+'" text-anchor="middle" font-size="10" fill="#5b6c78">'+cfg.x[i]+'</text>';
+  }
+  svg += '<text x="'+x(n-1)+'" y="'+(H-P.b+18)+'" text-anchor="end" font-size="10" fill="#5b6c78">'+cfg.x[n-1]+'</text>';
+  svg += '<line class="gline" x1="0" x2="0" y1="'+P.t+'" y2="'+(H-P.b)+'" stroke="#0d5ba4" stroke-width="1" opacity="0"/>';
+  svg += '</svg>';
+
+  el.innerHTML = svg + '<div class="tip" aria-hidden="true"></div>';
+  var svgEl = el.querySelector('svg');
+  var gline = el.querySelector('.gline');
+  var tip = el.querySelector('.tip');
+
+  svgEl.addEventListener('pointermove', function(e){
+    var r = svgEl.getBoundingClientRect();
+    var vx = (e.clientX-r.left)/r.width*W;
+    var i = Math.round((vx-P.l)/((W-P.l-P.r)/(n-1)));
+    if(i<0) i=0; if(i>n-1) i=n-1;
+    var px = x(i)/W*r.width;
+    gline.setAttribute('x1', x(i)); gline.setAttribute('x2', x(i)); gline.setAttribute('opacity','0.5');
+    var rows = cfg.series.map(function(s){
+      return '<span style="color:'+s.color+'">● </span>'+s.name+'：<b>'+tickFmt(s.v[i])+'</b>';
+    }).join('<br>');
+    tip.innerHTML = '<b>'+cfg.x[i]+'（'+WEEKDAY_NAMES[new Date(2026,9,1+i).getDay()]+'）</b><br>'+rows;
+    tip.style.left = px + 'px';
+    tip.style.top = Math.max(38, (y(cfg.series[0].v[i])/H*r.height*1.0) - 6) + 'px';
+    tip.classList.add('on');
+  });
+  svgEl.addEventListener('pointerleave', function(){
+    tip.classList.remove('on'); gline.setAttribute('opacity','0');
+  });
+}
+
+function ratioChart(el, cfg){
+  var W=780, H=300, P={l:58,r:24,t:26,b:56};
+  var n = cfg.items.length;
+  var yMax = 1.0;
+  var y = function(v){ return P.t + (1-v/yMax)*(H-P.t-P.b); };
+  var slot = (W-P.l-P.r)/n;
+  var bw = Math.min(88, slot*0.42);
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="'+esc(cfg.title)+'">';
+
+  svg += '<rect x="'+P.l+'" y="'+y(0.95)+'" width="'+(W-P.l-P.r)+'" height="'+(y(0.55)-y(0.95))+'" fill="rgba(13,91,164,.06)"/>';
+  svg += '<text x="'+(P.l+8)+'" y="'+(y(0.95)-6)+'" font-size="10" fill="#3a688f">生产类参考区间 0.55 – 0.95</text>';
+
+  [0,0.25,0.5,0.75,1].forEach(function(v){
+    svg += '<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#e6edf2"/>';
+    svg += '<text x="'+(P.l-9)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="10.5" fill="#5b6c78">'+v.toFixed(2)+'</text>';
+  });
+
+  var colors = {production:'#0d5ba4', office:'#b7791f', suspect:'#c2410c'};
+  cfg.items.forEach(function(it,i){
+    var cx = P.l + slot*(i+0.5);
+    var h = y(0) - y(it.value);
+    var c = colors[it.kind] || '#0d5ba4';
+    svg += '<rect x="'+(cx-bw/2)+'" y="'+y(it.value)+'" width="'+bw+'" height="'+h+'" rx="3" fill="'+c+'" opacity="'+(it.kind==='suspect'?0.95:0.75)+'"/>';
+    svg += '<text x="'+cx+'" y="'+(y(it.value)-7)+'" text-anchor="middle" font-size="11.5" font-weight="700" fill="'+(it.kind==='suspect'?'#c2410c':'#33475b')+'">'+it.value.toFixed(2)+'</text>';
+    var words = it.label.split(' ');
+    svg += '<text x="'+cx+'" y="'+(H-P.b+18)+'" text-anchor="middle" font-size="10.5" fill="#5b6c78">'+words[0]+'</text>';
+    svg += '<text x="'+cx+'" y="'+(H-P.b+32)+'" text-anchor="middle" font-size="10" fill="#5d6f7c">'+words.slice(1).join(' ')+'</text>';
+    if(it.kind==='suspect'){
+      svg += '<text x="'+cx+'" y="'+(y(1.0)+18)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="#c2410c">标注为办公 ▲</text>';
+    }
+  });
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+
+function renderChart(f){
+  var host = document.getElementById('chart-'+f.id);
+  if(!host) return;
+  if(f.chart.kind==='ratio'){ ratioChart(host, {items:f.chart.items, title:f.chart.title, x:labels}); return; }
+  var cfg = f.chart;
+  cfg.x = labels;
+  lineChart(host, cfg);
+}
+
+function detailHTML(f){
+  var sevCls = f.sev==='high'?'high':f.sev==='mid'?'mid':'low';
+  var legend = (f.chart.series||[]).map(function(s){
+    return '<span><i style="background:'+s.color+'"></i>'+esc(s.name)+'</span>';
+  }).join('');
+  if(f.chart.kind==='ratio'){
+    legend = '<span><i style="background:#0d5ba4"></i>生产类</span>'+
+             '<span><i style="background:#b7791f"></i>办公类</span>'+
+             '<span><i style="background:#c2410c"></i>待判定 / 错分</span>';
+  }
+
+  var evHtml = f.evidence.map(function(e,i){
+    var tbl = '';
+    if(e.tbl){
+      tbl = '<table class="ev-tbl"><tr>'+e.tbl.head.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('')+'</tr>';
+      e.tbl.rows.forEach(function(r,ri){
+        tbl += '<tr>'+r.map(function(c,ci){
+          var bad = e.tbl.mark && e.tbl.mark.r===ri && e.tbl.mark.c===ci;
+          return '<td class="'+(bad?'bad':'')+'">'+esc(c)+'</td>';
+        }).join('')+'</tr>';
+      });
+      tbl += '</table>';
+    }
+    /* e.value 为预置富文本（含强调标记）故不转义；若改接外部数据源，须先过滤再拼入 */
+    return '<li><span class="ev-n">'+String(i+1).padStart(2,'0')+'</span><div style="min-width:0">'+
+      '<div class="ev-l">'+esc(e.label)+'</div><div class="ev-v">'+e.value+'</div>'+
+      '<div class="ev-d">'+esc(e.detail)+'</div>'+tbl+'</div></li>';
+  }).join('');
+
+  var causeHtml = f.causes.map(function(c){
+    return '<div class="cause"><div class="c-top"><span>'+esc(c.name)+'</span><b>'+c.score+'%</b></div>'+
+      '<div class="c-bar" aria-hidden="true"><i style="width:'+c.score+'%"></i></div><div class="c-note">'+esc(c.note)+'</div></div>';
+  }).join('');
+
+  var impHtml = f.impacts.map(function(x){
+    return '<div class="imp"><span class="il">'+esc(x.label)+'</span><span class="iv">'+esc(x.value)+'</span></div>';
+  }).join('');
+
+  var disposed = f.status!=='待确认';
+
+  var actionHtml = disposed
+    ? '<div class="done '+(f.status==='已派单'?'dispatched':f.status==='疑似误报'?'dismissed':'')+'">'+
+        '<div><div class="dt">'+esc(f.status)+'</div><div class="dn">'+(f.log? esc(f.log.at)+' · '+esc(f.log.by)+' · '+esc(f.log.note) : '')+'</div></div>'+
+        '<button class="link" data-act="undo">撤销处置</button></div>'
+    : '<div class="disp-b">'+
+        '<button class="btn primary" data-act="confirm">确认异常 · 生成工单</button>'+
+        '<button class="btn ghost" data-act="dispatch">转派现场巡检</button>'+
+        '<button class="btn ghost" data-act="dismiss">标记误报</button>'+
+      '</div>'+
+      '<div class="hint">AI 输出止于「候选根因 + 证据链」；确认后生成工单，不直接下发控制指令（对应报告 4.6 / 5.2）。</div>';
+
+  return '<div class="d-tags"><span class="tag '+sevCls+'">'+esc(f.sevLabel)+'</span>'+
+      '<span class="tag type">'+esc(f.type)+'</span>'+
+      '<span class="tag '+statusCls(f.status)+'">'+esc(f.status)+'</span></div>'+
+    '<h2 class="d-title">'+esc(f.title)+'</h2>'+
+    '<div class="d-meta">'+esc(f.meter)+' · 分项 '+esc(f.branch)+' · 首次发现 '+esc(f.firstSeen)+' · 置信度 <b>'+f.conf+'%</b></div>'+
+    '<div class="d-sum">'+esc(f.summary)+'</div>'+
+    '<div class="chart-wrap"><div class="chart-head"><span class="ct">'+esc(f.chart.title)+'</span>'+
+      '<span class="legend">'+legend+'</span></div>'+
+      '<div class="chart" id="chart-'+f.id+'"></div>'+
+      '<div class="chart-note">'+esc(f.chart.note)+'</div></div>'+
+    '<div class="d-cols">'+
+      '<div><h4 class="sec">证据链 · '+f.evidence.length+' 项</h4><ol class="ev">'+evHtml+'</ol></div>'+
+      '<div><h4 class="sec">候选根因</h4><div class="causes">'+causeHtml+'</div>'+
+        '<h4 class="sec">影响估算</h4><div class="impacts">'+impHtml+'</div></div>'+
+    '</div>'+
+    '<div class="dispose">'+actionHtml+'</div>';
+}
+
+function renderDetail(){
+  var empty = document.getElementById('emptyState');
+  var body = document.getElementById('detailBody');
+  var f = FINDINGS.filter(function(x){ return x.id===state.selected; })[0];
+  if(!f){
+    empty.style.display='grid'; body.innerHTML='';
+    var et = empty.querySelector('.e-t'), es = empty.querySelector('.e-s');
+    if(!state.ran){
+      et.textContent='尚未运行诊断';
+      es.textContent='点击右上角「运行诊断」，系统将依次完成数据治理、分项归集、负荷对比与异常定位。';
+    } else if(!filteredFindings().length){
+      et.textContent='无匹配异常';
+      es.textContent='当前过滤条件下没有异常项，可切换左侧过滤条件查看。';
+    } else {
+      et.textContent='选择一条异常';
+      es.textContent='从左侧异常队列选择一项，查看证据链、候选根因与处置建议。';
+    }
+    return;
+  }
+  empty.style.display='none';
+  body.innerHTML = detailHTML(f);
+  renderChart(f);
+}
+
+function renderKpi(){
+  if(!state.ran){
+    document.getElementById('kpis').innerHTML =
+      card('接入表计', '8', '只 · 15 分钟粒度') +
+      card('检出异常', '—', '等待诊断') +
+      card('高置信', '—', '等待诊断') +
+      card('待人工确认', '—', '等待诊断') +
+      card('可追回 / 追补电费', '—', '等待诊断');
+    return;
+  }
+  var detected = FINDINGS.length;
+  var high = FINDINGS.filter(function(f){ return f.conf>=75; }).length;
+  var pending = FINDINGS.filter(function(f){ return f.status==='待确认'; }).length;
+  var low = FINDINGS.filter(function(f){ return f.conf<50; }).length;
+  var recover = FINDINGS.reduce(function(a,f){ return a + (f.money||0); }, 0);
+  var locked = FINDINGS.reduce(function(a,f){
+    return a + ((f.status==='已确认'||f.status==='已派单') ? (f.money||0) : 0);
+  }, 0);
+
+  document.getElementById('kpis').innerHTML =
+    card('接入表计', '8', '只 · 15 分钟粒度') +
+    card('检出异常', detected, low>0 ? '含 '+low+' 项低置信疑似' : '全部达到中高置信') +
+    card('高置信', high, '置信度 ≥ 75%') +
+    card('待人工确认', pending, '按规则进入人工队列') +
+    card('可追回 / 追补电费', '¥'+nf(recover), locked>0 ? '已锁定 ¥'+nf(locked) : '确认后锁定');
+
+  function card(l,v,s){
+    return '<div class="kpi"><div class="kl">'+l+'</div><div class="kv">'+v+'</div><div class="ks">'+s+'</div></div>';
+  }
+}
+
+/* ---------- 交互 ---------- */
+document.getElementById('queueList').addEventListener('click', function(e){
+  var btn = e.target.closest('.qcard');
+  if(!btn) return;
+  state.selected = btn.getAttribute('data-id');
+  /* 增量更新选中态：不重建列表，保留滚动位置与键盘焦点 */
+  var cards = this.querySelectorAll('.qcard');
+  for(var i=0;i<cards.length;i++){
+    cards[i].classList.toggle('sel', cards[i].getAttribute('data-id')===state.selected);
+  }
+  renderDetail();
+});
+
+document.getElementById('filters').addEventListener('click', function(e){
+  var b = e.target.closest('.chip');
+  if(!b) return;
+  state.filter = b.getAttribute('data-filter');
+  Array.prototype.forEach.call(this.children, function(c){ c.classList.toggle('on', c===b); });
+  renderQueue();
+  /* 过滤后选中项不在列表时自动选中首项，保持详情与队列上下文一致 */
+  var list = filteredFindings();
+  var has = list.some(function(f){ return f.id===state.selected; });
+  if(!has){ state.selected = list.length ? list[0].id : null; renderDetail(); }
+});
+
+document.getElementById('detailBody').addEventListener('click', function(e){
+  var b = e.target.closest('[data-act]');
+  if(!b) return;
+  var f = FINDINGS.filter(function(x){ return x.id===state.selected; })[0];
+  if(!f) return;
+  var act = b.getAttribute('data-act');
+  var now = new Date();
+  var p2 = function(v){ return String(v).padStart(2,'0'); };
+  var dstr = now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
+  var hhmm = dstr+' '+p2(now.getHours())+':'+p2(now.getMinutes());
+
+  if(act==='undo'){
+    f.status = '待确认'; f.log = null;
+  } else {
+    f.status = act==='confirm' ? '已确认' : act==='dispatch' ? '已派单' : '疑似误报';
+    f.log = {
+      at: hhmm,
+      by: '值班工程师',
+      note: act==='confirm'
+        ? '已确认异常，工单 WO-'+dstr.replace(/-/g,'')+'-'+String(1+FINDINGS.indexOf(f)).padStart(2,'0')+' 已生成，转现场复核。'
+        : act==='dispatch'
+        ? '已转派现场巡检，等待回传结果。'
+        : '已加入误报样本池，用于阈值与规则迭代。'
+    };
+  }
+  renderQueue(); renderDetail(); renderKpi(); renderPipeline();
+});
+
+document.getElementById('runBtn').addEventListener('click', function(){ runPipeline(); });
+
+var running = false;
+function runPipeline(){
+  if(running) return;
+  running = true;
+  var btn = document.getElementById('runBtn');
+  var live = document.getElementById('live');
+  var liveT = document.getElementById('liveT');
+  btn.disabled = true;
+  btn.style.opacity = '.7';
+  live.classList.add('busy');
+  liveT.textContent = '诊断中';
+  state.ran = false;
+  state.selected = null;
+  /* 重跑视为完整重演：复位处置状态与 KPI/队列 */
+  FINDINGS.forEach(function(f){ f.status = '待确认'; f.log = null; });
+  renderKpi(); renderQueue();
+  document.getElementById('emptyState').style.display='grid';
+  document.getElementById('detailBody').innerHTML='';
+
+  var i = 0;
+  function tick(){
+    renderPipeline(i);
+    liveT.textContent = '诊断中 · ' + STEP_DEFS[i].t;
+    i++;
+    if(i < STEP_DEFS.length){
+      setTimeout(tick, i===3 ? 520 : 330);
+    } else {
+      setTimeout(function(){
+        state.ran = true;
+        renderPipeline(null);
+        var fl = filteredFindings();
+        state.selected = fl.length ? fl[0].id : null;
+        renderQueue(); renderDetail(); renderKpi();
+        running = false;
+        btn.disabled = false; btn.style.opacity = '1';
+        live.classList.remove('busy');
+        liveT.textContent = '诊断完成';
+      }, 380);
+    }
+  }
+  setTimeout(tick, 200);
+}
+
+/* ---------- 报价单弹窗 ---------- */
+(function(){
+  var overlay = document.getElementById('quoteOverlay');
+  if(!overlay) return;
+
+  function openQuote(){
+    overlay.hidden = false;
+    document.body.classList.add('q-lock');
+    document.getElementById('quotePrint').focus();
+  }
+  function closeQuote(){
+    overlay.hidden = true;
+    document.body.classList.remove('q-lock');
+    document.getElementById('quoteBtn').focus();
+  }
+
+  document.getElementById('quoteBtn').addEventListener('click', openQuote);
+  var flink = document.getElementById('quoteLink');
+  if(flink) flink.addEventListener('click', openQuote);
+  document.getElementById('quoteClose').addEventListener('click', closeQuote);
+  document.getElementById('quotePrint').addEventListener('click', function(){ window.print(); });
+  overlay.addEventListener('click', function(e){ if(e.target === overlay) closeQuote(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !overlay.hidden) closeQuote();
+  });
+
+  /* 报价编号 / 日期 / 有效期按当日生成 */
+  var now = new Date();
+  var p2 = function(v){ return String(v).padStart(2,'0'); };
+  var iso = now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
+  var exp = new Date(now.getTime() + 30*86400000);
+  var isoExp = exp.getFullYear()+'-'+p2(exp.getMonth()+1)+'-'+p2(exp.getDate());
+  document.getElementById('qNo').textContent = 'PE-QT-'+iso.replace(/-/g,'')+'-001';
+  document.getElementById('qDate').textContent = iso;
+  document.getElementById('qValid').textContent = '30 天（至 '+isoExp+'）';
+})();
+
+/* ---------- 设计方案弹窗 ---------- */
+(function(){
+  var overlay = document.getElementById('designOverlay');
+  if(!overlay) return;
+
+  function openDesign(){
+    overlay.hidden = false;
+    document.body.classList.add('q-lock');
+    document.getElementById('designPrint').focus();
+  }
+  function closeDesign(){
+    overlay.hidden = true;
+    document.body.classList.remove('q-lock');
+    document.getElementById('designBtn').focus();
+  }
+
+  document.getElementById('designBtn').addEventListener('click', openDesign);
+  var dlink = document.getElementById('designLink');
+  if(dlink) dlink.addEventListener('click', openDesign);
+  document.getElementById('designClose').addEventListener('click', closeDesign);
+  document.getElementById('designPrint').addEventListener('click', function(){ window.print(); });
+  overlay.addEventListener('click', function(e){ if(e.target === overlay) closeDesign(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !overlay.hidden) closeDesign();
+  });
+
+  /* 方案编号 / 编制日期按当日生成 */
+  var now = new Date();
+  var p2 = function(v){ return String(v).padStart(2,'0'); };
+  var iso = now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
+  document.getElementById('dsNo').textContent = 'PE-DS-'+iso.replace(/-/g,'')+'-001';
+  document.getElementById('dsDate').textContent = iso;
+})();
+
+/* ---------- 初始化（预运行态，等待用户点击「运行诊断」） ---------- */
+renderPipeline();
+renderKpi();
+renderQueue();
+
+})();
+</script>
+</body>
+</html>
